@@ -4,43 +4,698 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DriveCapture</title>
+<meta name="description" content="A macOS menu bar app: press a shortcut, capture your screen, and the Google Drive link is already in your clipboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --accent: #0a66d8; --card: #f5f5f7; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #111113; --fg: #f5f5f7; --muted: #a1a1a6; --accent: #4c9aff; --card: #1c1c1f; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  main { max-width: 720px; margin: 0 auto; padding: 48px 16px; }
-  h1 { font-size: 2.2rem; margin: 0 0 8px; }
-  .lead { color: var(--muted); font-size: 1.15rem; margin: 0 0 32px; }
-  .card { background: var(--card); border-radius: 12px; padding: 20px 24px; margin: 16px 0; }
-  a { color: var(--accent); }
-  footer { color: var(--muted); font-size: 0.9rem; margin-top: 40px; }
+  :root {
+    --ink: #17173D;
+    --paper: #F7F8FF;
+    --sakura: #FF4F9A;
+    --marker: #FFE14D;
+    --drive: #3B82F6;
+    --muted: #55567A;
+    --panel: #FFFFFF;
+    --display: "Dela Gothic One", "Hiragino Sans", sans-serif;
+    --body: "M PLUS Rounded 1c", -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 500 17px/1.7 var(--body);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--sakura); outline-offset: 3px; border-radius: 4px; }
+
+  /* ---------- top bar ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 3px solid var(--ink);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 20px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px; border: 3px solid var(--ink); border-radius: 8px;
+    background: var(--marker); display: grid; place-items: center; font-size: 14px;
+  }
+  .bar nav { display: flex; gap: 6px; align-items: center; }
+  .bar nav a { text-decoration: none; font-weight: 700; padding: 6px 10px; border-radius: 8px; }
+  .bar nav a:hover { background: var(--marker); }
+  .lang {
+    font: 800 14px var(--body); color: var(--ink); background: var(--panel);
+    border: 3px solid var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  }
+  .lang:hover { background: var(--marker); }
+  @media (max-width: 640px) { .bar nav a { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    min-height: calc(100vh - 60px);
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center; gap: 24px;
+    padding: 40px clamp(16px, 5vw, 72px) 64px;
+    overflow: hidden;
+  }
+  /* manga speed lines radiating from the laptop */
+  .hero::before {
+    content: ""; position: absolute; inset: -40%;
+    background: repeating-conic-gradient(from 0deg at 68% 50%, var(--ink) 0deg 0.7deg, transparent 0.7deg 7deg);
+    opacity: 0.07; pointer-events: none;
+    -webkit-mask-image: radial-gradient(circle at 68% 50%, transparent 18%, #000 60%);
+            mask-image: radial-gradient(circle at 68% 50%, transparent 18%, #000 60%);
+  }
+  .hero-copy { position: relative; z-index: 1; }
+  .hero h1 {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(40px, 5.8vw, 86px); line-height: 1.02; letter-spacing: -0.01em;
+    margin: 0 0 24px;
+  }
+  .hero h1 span { display: block; }
+  .hero h1 .hl {
+    display: inline;
+    background: linear-gradient(transparent 58%, var(--marker) 58% 92%, transparent 92%);
+    -webkit-box-decoration-break: clone; box-decoration-break: clone;
+    padding: 0 0.06em; margin-left: -0.06em;
+  }
+  .hero .lead { font-size: clamp(17px, 1.6vw, 20px); max-width: 30em; color: var(--muted); margin: 0 0 32px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn {
+    font: 800 17px var(--body); text-decoration: none; cursor: pointer;
+    padding: 14px 24px; border-radius: 14px; border: 3px solid var(--ink);
+    background: var(--sakura); color: #fff;
+    box-shadow: 5px 5px 0 var(--ink);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .btn:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); }
+  .btn:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--ink); }
+  .btn.ghost { background: var(--panel); color: var(--ink); }
+  .platform { font-size: 14px; color: var(--muted); margin-top: 18px; }
+
+  .stage { position: relative; height: min(72vh, 640px); z-index: 1; }
+  .stage canvas { width: 100% !important; height: 100% !important; display: block; cursor: grab; touch-action: pan-y; }
+  .stage canvas:active { cursor: grabbing; }
+  .stage-hint {
+    position: absolute; right: 8px; bottom: 4px; font-size: 13px; color: var(--muted);
+    background: var(--panel); border: 2px solid var(--ink); border-radius: 999px; padding: 2px 12px;
+  }
+  .burst {
+    position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%) scale(0) rotate(-12deg);
+    font-family: var(--display); font-size: clamp(42px, 6vw, 84px); color: var(--sakura);
+    -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill;
+    text-shadow: 5px 5px 0 var(--ink);
+    pointer-events: none; white-space: nowrap; opacity: 0;
+  }
+  .burst.on { animation: burst .9s cubic-bezier(.2,1.6,.4,1) forwards; }
+  @keyframes burst {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(.2) rotate(-18deg); }
+    30% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(-8deg); }
+    75% { opacity: 1; transform: translate(-50%, -60%) scale(1) rotate(-8deg); }
+    100% { opacity: 0; transform: translate(-50%, -75%) scale(.95) rotate(-8deg); }
+  }
+  .webgl-fallback { display: none; height: 100%; place-items: center; text-align: center; color: var(--muted); }
+  .no-webgl .webgl-fallback { display: grid; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 24px; }
+    .stage { height: 380px; order: -1; }
+    .hero::before { background: repeating-conic-gradient(from 0deg at 50% 22%, var(--ink) 0deg 0.7deg, transparent 0.7deg 7deg); }
+  }
+
+  /* ---------- sections ---------- */
+  section { padding: 88px clamp(16px, 5vw, 72px); }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h2 {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(32px, 4.4vw, 56px); line-height: 1.05; margin: 0 0 16px;
+  }
+  .section-lead { color: var(--muted); max-width: 36em; margin: 0 0 40px; font-size: 18px; }
+
+  /* how it works: a manga strip — four panels of uneven width */
+  .strip {
+    display: grid; grid-template-columns: 1.1fr 0.9fr 1fr 1.2fr; gap: 12px;
+    border: 4px solid var(--ink); padding: 12px; background: var(--ink); border-radius: 6px;
+  }
+  .frame {
+    background: var(--panel); padding: 22px 20px 24px; position: relative; overflow: hidden;
+    min-height: 250px; display: flex; flex-direction: column;
+  }
+  .frame:nth-child(2) { background: var(--marker); }
+  .frame:nth-child(4) { background: #FFE3EF; }
+  .frame .step {
+    font-family: var(--display); font-size: 15px; width: 34px; height: 34px;
+    display: grid; place-items: center; border: 3px solid var(--ink); border-radius: 50%;
+    background: var(--panel); margin-bottom: 14px;
+  }
+  .frame h3 { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1.15; margin: 0 0 8px; }
+  .frame p { margin: 0; font-size: 15.5px; color: var(--muted); }
+  .frame .sfx {
+    position: absolute; right: 12px; bottom: 6px; font-family: var(--display); font-size: 34px;
+    color: transparent; -webkit-text-stroke: 1.5px var(--ink); opacity: .35; transform: rotate(-8deg);
+  }
+  .frame .halftone {
+    position: absolute; inset: auto -20px -20px auto; width: 140px; height: 140px;
+    background: radial-gradient(var(--ink) 1.6px, transparent 1.8px) 0 0 / 10px 10px;
+    opacity: .12; border-radius: 50%;
+  }
+  @media (max-width: 900px) { .strip { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .strip { grid-template-columns: 1fr; } .frame { min-height: 0; } }
+
+  /* shortcuts */
+  .keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 40px; }
+  .key-row { display: flex; align-items: center; gap: 18px; padding: 14px 0; border-bottom: 2px dashed color-mix(in srgb, var(--ink) 25%, transparent); }
+  .caps { display: flex; gap: 6px; flex-shrink: 0; }
+  kbd {
+    font: 800 17px var(--body); min-width: 46px; height: 46px; padding: 0 10px;
+    display: inline-grid; place-items: center; background: var(--panel);
+    border: 3px solid var(--ink); border-radius: 10px; box-shadow: 0 4px 0 var(--ink);
+  }
+  kbd small { display: block; font-size: 10px; font-weight: 700; line-height: 1; color: var(--muted); }
+  .key-row strong { display: block; font-size: 17px; }
+  .key-row span { color: var(--muted); font-size: 15px; }
+  .keys-note { margin-top: 28px; color: var(--muted); font-size: 15px; }
+  @media (max-width: 760px) { .keys { grid-template-columns: 1fr; } }
+
+  /* extras */
+  .extras { background: var(--ink); color: var(--paper); }
+  .extras h2 { color: var(--paper); }
+  .extras .section-lead { color: #C9CAF0; }
+  .extras-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; align-items: stretch; }
+  .sound-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .sound-list li {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: center;
+    padding: 16px 18px; border: 2px solid #3A3B6E; border-radius: 14px;
+  }
+  .sound-list .jp { font-family: var(--display); font-size: 22px; color: var(--marker); grid-row: span 2; min-width: 4.5em; }
+  .sound-list strong { font-size: 16px; }
+  .sound-list span { color: #C9CAF0; font-size: 14.5px; }
+  .slap-card {
+    border: 3px solid var(--sakura); border-radius: 18px; padding: 26px; position: relative;
+    background: radial-gradient(#ff4f9a33 1.5px, transparent 1.8px) 0 0 / 12px 12px;
+  }
+  .slap-card h3 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0 0 10px; color: var(--paper); }
+  .slap-card p { color: #C9CAF0; margin: 0 0 20px; font-size: 15.5px; }
+  .slap-card .btn { box-shadow: 5px 5px 0 var(--marker); border-color: var(--paper); }
+  .meter { margin-top: 22px; height: 14px; border: 2px solid var(--paper); border-radius: 999px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--marker); transition: width .5s ease-out; }
+  .meter-label { font-size: 13px; color: #C9CAF0; margin-top: 6px; }
+  @media (max-width: 860px) { .extras-grid { grid-template-columns: 1fr; } }
+
+  /* install */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; gap: 18px; max-width: 820px; }
+  .steps > li { counter-increment: s; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 16px; }
+  .steps > li > div { min-width: 0; }
+  .steps > li::before {
+    content: counter(s); font-family: var(--display); font-size: 20px;
+    width: 46px; height: 46px; display: grid; place-items: center;
+    border: 3px solid var(--ink); border-radius: 12px; background: var(--marker);
+  }
+  .steps h3 { font-size: 19px; font-weight: 800; margin: 8px 0 4px; }
+  .steps p { margin: 0 0 10px; color: var(--muted); font-size: 15.5px; }
+  .term {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--ink); color: #E8E9FF; border-radius: 12px; padding: 14px 14px 14px 18px;
+    font: 500 14.5px/1.6 var(--mono); overflow-x: auto;
+  }
+  .term code { flex: 1; white-space: pre; }
+  .term code::before { content: "$ "; color: var(--sakura); }
+  .copy {
+    flex-shrink: 0; font: 700 13px var(--body); cursor: pointer;
+    color: var(--ink); background: var(--marker); border: 0; border-radius: 8px; padding: 5px 10px;
+  }
+  .copy.done { background: #7CF0B0; }
+  .callout {
+    margin: 0 0 28px; padding: 14px 18px; border: 3px solid var(--ink); border-radius: 12px;
+    background: #FFE3EF; font-size: 15.5px; max-width: 820px;
+  }
+  .setup-list { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 15.5px; }
+  .setup-list li { margin-bottom: 4px; }
+
+  /* footer */
+  footer {
+    border-top: 3px solid var(--ink); padding: 32px clamp(16px, 5vw, 72px);
+    display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; color: var(--muted); font-size: 15px;
+  }
+  footer a { font-weight: 700; color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .btn, .burst.on { transition: none; animation: none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>DriveCapture</h1>
-  <p class="lead">A small macOS menu bar app: press a shortcut, capture a screenshot or screen recording, and it is uploaded to a Google Drive folder you choose — the link is copied to your clipboard.</p>
 
-  <div class="card">
-    <h2>What it does</h2>
-    <ul>
-      <li>Global shortcuts for region / full-screen screenshots and screen recordings.</li>
-      <li>Uploads the capture to the Google Drive folder you pick in Settings, using your own Google account.</li>
-      <li>Creates a view link for the uploaded file and copies it to the clipboard.</li>
-    </ul>
-  </div>
+<header class="bar">
+  <a class="brand" href="#top" aria-label="DriveCapture home"><span class="brand-mark" aria-hidden="true">📸</span>DriveCapture</a>
+  <nav aria-label="Sections">
+    <a href="#how" data-en="How it works" data-vi="Cách hoạt động">How it works</a>
+    <a href="#keys" data-en="Shortcuts" data-vi="Phím tắt">Shortcuts</a>
+    <a href="#install" data-en="Install" data-vi="Cài đặt">Install</a>
+    <button class="lang" id="lang" type="button" aria-label="Switch language">VI</button>
+  </nav>
+</header>
 
-  <div class="card">
-    <h2>Why it asks for Google Drive access</h2>
-    <p>DriveCapture needs Google Drive access to list your folders (so you can choose where captures go), upload the files you capture, and set a link-sharing permission on those files. It does not read, modify or delete any other files.</p>
-  </div>
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <h1 id="hero-title">
+        <span data-en="Press a key." data-vi="Bấm phím.">Press a key.</span>
+        <span class="hl" data-en="Paste the link." data-vi="Dán link.">Paste the link.</span>
+      </h1>
+      <p class="lead" data-en="DriveCapture lives in your Mac's menu bar. Capture a screenshot or screen recording, and it uploads to your Google Drive folder — the link is already in your clipboard."
+         data-vi="DriveCapture nằm trên thanh menu của Mac. Chụp ảnh hoặc quay màn hình, app tự upload lên folder Google Drive của bạn — link đã nằm sẵn trong clipboard.">
+        DriveCapture lives in your Mac's menu bar. Capture a screenshot or screen recording, and it uploads to your Google Drive folder — the link is already in your clipboard.
+      </p>
+      <div class="cta-row">
+        <a class="btn" href="#install" data-en="Install DriveCapture" data-vi="Cài DriveCapture">Install DriveCapture</a>
+        <a class="btn ghost" href="#how" data-en="See how it works" data-vi="Xem cách hoạt động">See how it works</a>
+      </div>
+      <p class="platform" data-en="Free · macOS 15 or later · Apple Silicon for the slap feature" data-vi="Miễn phí · macOS 15 trở lên · Tính năng vỗ máy cần Apple Silicon">Free · macOS 15 or later · Apple Silicon for the slap feature</p>
+    </div>
 
-  <div class="card">
-    <h2>Privacy</h2>
-    <p>There is no DriveCapture server. Your sign-in tokens stay on your Mac and your files go directly to your own Google Drive. Read the <a href="privacy.html">privacy policy</a>.</p>
-  </div>
+    <div class="stage" id="stage">
+      <div class="webgl-fallback"><p data-en="Your browser can't show the 3D preview." data-vi="Trình duyệt không hiển thị được bản xem trước 3D.">Your browser can't show the 3D preview.</p></div>
+      <div class="burst" id="burst" aria-hidden="true">やめて！</div>
+      <span class="stage-hint" data-en="Drag to turn · click to slap" data-vi="Kéo để xoay · bấm để vỗ">Drag to turn · click to slap</span>
+    </div>
+  </section>
 
-  <footer>Contact: <a href="mailto:anhtrannguyen@zigexn.vn">anhtrannguyen@zigexn.vn</a></footer>
+  <section id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title" data-en="From screen to shareable link in four beats" data-vi="Từ màn hình tới link chia sẻ trong bốn nhịp">From screen to shareable link in four beats</h2>
+      <p class="section-lead" data-en="No saving, no dragging files into Drive, no copying share links. You capture; the rest happens on its own."
+         data-vi="Không cần lưu file, kéo thả lên Drive hay copy link chia sẻ. Bạn chỉ việc chụp, phần còn lại app lo.">No saving, no dragging files into Drive, no copying share links. You capture; the rest happens on its own.</p>
+      <ol class="strip" role="list">
+        <li class="frame">
+          <div class="step" aria-hidden="true">1</div>
+          <h3 data-en="Press a shortcut" data-vi="Bấm phím tắt">Press a shortcut</h3>
+          <p data-en="Option + Shift + 1 to 4, from any app." data-vi="Option + Shift + 1 đến 4, ở bất kỳ app nào.">Option + Shift + 1 to 4, from any app.</p>
+          <span class="sfx" aria-hidden="true">カチッ</span><i class="halftone"></i>
+        </li>
+        <li class="frame">
+          <div class="step" aria-hidden="true">2</div>
+          <h3 data-en="Pick the area" data-vi="Chọn vùng">Pick the area</h3>
+          <p data-en="Drag a region, or take the whole screen. Recordings get a 3-2-1 countdown." data-vi="Kéo chọn vùng hoặc lấy cả màn hình. Quay video có đếm ngược 3-2-1.">Drag a region, or take the whole screen. Recordings get a 3-2-1 countdown.</p>
+          <span class="sfx" aria-hidden="true">シュッ</span><i class="halftone"></i>
+        </li>
+        <li class="frame">
+          <div class="step" aria-hidden="true">3</div>
+          <h3 data-en="It uploads" data-vi="App tự upload">It uploads</h3>
+          <p data-en="Straight to the Drive folder you chose, with a view link your team can open." data-vi="Thẳng lên folder Drive bạn đã chọn, kèm link xem mà team mở được.">Straight to the Drive folder you chose, with a view link your team can open.</p>
+          <span class="sfx" aria-hidden="true">ビュン</span><i class="halftone"></i>
+        </li>
+        <li class="frame">
+          <div class="step" aria-hidden="true">4</div>
+          <h3 data-en="Paste anywhere" data-vi="Dán ở bất cứ đâu">Paste anywhere</h3>
+          <p data-en="The link is in your clipboard. Drop it into Slack, a GitHub issue, or a test sheet." data-vi="Link đã có trong clipboard. Dán vào Slack, GitHub issue hay sheet test.">The link is in your clipboard. Drop it into Slack, a GitHub issue, or a test sheet.</p>
+          <span class="sfx" aria-hidden="true">ペタッ</span><i class="halftone"></i>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="keys" aria-labelledby="keys-title">
+    <div class="wrap">
+      <h2 id="keys-title" data-en="Four shortcuts to remember" data-vi="Bốn phím tắt cần nhớ">Four shortcuts to remember</h2>
+      <p class="section-lead" data-en="All of them can be changed in Settings → Shortcuts." data-vi="Đổi được hết trong Settings → Phím tắt.">All of them can be changed in Settings → Shortcuts.</p>
+      <div class="keys">
+        <div class="key-row">
+          <div class="caps"><kbd><span>⌥<small>option</small></span></kbd><kbd><span>⇧<small>shift</small></span></kbd><kbd>1</kbd></div>
+          <div><strong data-en="Screenshot a region" data-vi="Chụp ảnh một vùng">Screenshot a region</strong><span data-en="Press Space to pick a window instead." data-vi="Bấm Space để chọn cả cửa sổ.">Press Space to pick a window instead.</span></div>
+        </div>
+        <div class="key-row">
+          <div class="caps"><kbd><span>⌥<small>option</small></span></kbd><kbd><span>⇧<small>shift</small></span></kbd><kbd>2</kbd></div>
+          <div><strong data-en="Screenshot the whole screen" data-vi="Chụp ảnh toàn màn hình">Screenshot the whole screen</strong><span data-en="The screen your pointer is on." data-vi="Màn hình đang có con trỏ chuột.">The screen your pointer is on.</span></div>
+        </div>
+        <div class="key-row">
+          <div class="caps"><kbd><span>⌥<small>option</small></span></kbd><kbd><span>⇧<small>shift</small></span></kbd><kbd>3</kbd></div>
+          <div><strong data-en="Record a region" data-vi="Quay video một vùng">Record a region</strong><span data-en="Press it again to stop recording." data-vi="Bấm lại lần nữa để dừng quay.">Press it again to stop recording.</span></div>
+        </div>
+        <div class="key-row">
+          <div class="caps"><kbd><span>⌥<small>option</small></span></kbd><kbd><span>⇧<small>shift</small></span></kbd><kbd>4</kbd></div>
+          <div><strong data-en="Record the whole screen" data-vi="Quay video toàn màn hình">Record the whole screen</strong><span data-en="Or stop from the red timer in the menu bar." data-vi="Hoặc dừng bằng đồng hồ đỏ trên thanh menu.">Or stop from the red timer in the menu bar.</span></div>
+        </div>
+      </div>
+      <p class="keys-note" data-en="Press Esc while picking an area or during the countdown to cancel. Nothing is uploaded." data-vi="Bấm Esc khi đang chọn vùng hoặc đang đếm ngược để huỷ. Không có gì được upload.">Press Esc while picking an area or during the countdown to cancel. Nothing is uploaded.</p>
+    </div>
+  </section>
+
+  <section class="extras" aria-labelledby="extras-title">
+    <div class="wrap">
+      <h2 id="extras-title" data-en="It talks back" data-vi="Nó biết kêu">It talks back</h2>
+      <p class="section-lead" data-en="Every finished upload gets a sound, so you know the link is ready without looking. Pick anime voices, macOS sounds, or your own audio file."
+         data-vi="Mỗi lần upload xong đều có âm báo, khỏi cần nhìn cũng biết link đã sẵn. Chọn giọng anime, âm của macOS hoặc file âm thanh của bạn.">Every finished upload gets a sound, so you know the link is ready without looking. Pick anime voices, macOS sounds, or your own audio file.</p>
+      <div class="extras-grid">
+        <ul class="sound-list">
+          <li><span class="jp">やめて</span><strong data-en="Link copied" data-vi="Đã copy link">Link copied</strong><span data-en="Yamete kudasai — the default when an upload finishes." data-vi="Yamete kudasai — mặc định khi upload xong.">Yamete kudasai — the default when an upload finishes.</span></li>
+          <li><span class="jp">えぇっ？</span><strong data-en="Upload failed" data-vi="Upload lỗi">Upload failed</strong><span data-en="An anime-girl gasp. The file stays on your Mac, one click to retry." data-vi="Tiếng hốt hoảng của anime girl. File vẫn còn trên máy, bấm một cái là thử lại.">An anime-girl gasp. The file stays on your Mac, one click to retry.</span></li>
+          <li><span class="jp">なに？！</span><strong data-en="NANI?!" data-vi="NANI?!">NANI?!</strong><span data-en="For when you want more drama." data-vi="Khi bạn cần thêm chút kịch tính.">For when you want more drama.</span></li>
+        </ul>
+        <div class="slap-card">
+          <h3 data-en="Slap your MacBook" data-vi="Vỗ MacBook">Slap your MacBook</h3>
+          <p data-en="DriveCapture reads the hidden motion sensor in Apple Silicon MacBooks. Give it a slap and it protests — harder slaps are louder. Sensitivity is adjustable so typing doesn't set it off."
+             data-vi="DriveCapture đọc cảm biến chuyển động ẩn trong MacBook Apple Silicon. Vỗ một cái là nó kêu — vỗ càng mạnh kêu càng to. Chỉnh được độ nhạy để gõ phím không bị kêu.">DriveCapture reads the hidden motion sensor in Apple Silicon MacBooks. Give it a slap and it protests — harder slaps are louder. Sensitivity is adjustable so typing doesn't set it off.</p>
+          <button class="btn" id="slap-btn" type="button" data-en="Slap the one above" data-vi="Vỗ cái máy phía trên">Slap the one above</button>
+          <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+          <div class="meter-label" id="meter-label" data-en="Slap strength" data-vi="Lực vỗ">Slap strength</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <h2 id="install-title" data-en="Install in about five minutes" data-vi="Cài trong khoảng năm phút">Install in about five minutes</h2>
+      <p class="section-lead" data-en="DriveCapture is built from source on your Mac. You need macOS 15 or later and a terminal."
+         data-vi="DriveCapture được build từ mã nguồn ngay trên Mac của bạn. Cần macOS 15 trở lên và Terminal.">DriveCapture is built from source on your Mac. You need macOS 15 or later and a terminal.</p>
+      <p class="callout" data-en="The repository is private for now. Ask the owner to add your GitHub account as a collaborator before cloning. Accounts @zigexn.vn can sign in right away; other Google accounts need their own OAuth client (see the README)."
+         data-vi="Hiện repo đang private. Nhờ chủ repo thêm tài khoản GitHub của bạn làm collaborator trước khi clone. Tài khoản @zigexn.vn đăng nhập được ngay; tài khoản Google khác cần tự tạo OAuth client (xem README).">The repository is private for now. Ask the owner to add your GitHub account as a collaborator before cloning. Accounts @zigexn.vn can sign in right away; other Google accounts need their own OAuth client (see the README).</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <h3 data-en="Install Apple's command line tools" data-vi="Cài Command Line Tools của Apple">Install Apple's command line tools</h3>
+            <p data-en="Skip this if you already have them — the command will tell you." data-vi="Có rồi thì bỏ qua — lệnh sẽ báo cho bạn biết.">Skip this if you already have them — the command will tell you.</p>
+            <div class="term"><code>xcode-select --install</code><button class="copy" type="button">Copy</button></div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3 data-en="Clone the repository" data-vi="Clone repo">Clone the repository</h3>
+            <div class="term"><code>git clone https://github.com/nguyyenanh-zigexn/driveCapture.git && cd driveCapture</code><button class="copy" type="button">Copy</button></div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3 data-en="Create a signing certificate (once)" data-vi="Tạo chứng chỉ ký code (một lần)">Create a signing certificate (once)</h3>
+            <p data-en="Keeps macOS from asking for Screen Recording permission again after every update. It lives in its own keychain." data-vi="Để macOS không hỏi lại quyền Screen Recording sau mỗi lần cập nhật. Chứng chỉ nằm trong keychain riêng.">Keeps macOS from asking for Screen Recording permission again after every update. It lives in its own keychain.</p>
+            <div class="term"><code>scripts/setup-signing.sh</code><button class="copy" type="button">Copy</button></div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3 data-en="Build and install" data-vi="Build và cài">Build and install</h3>
+            <p data-en="Copies DriveCapture to /Applications and opens it. Look for the camera icon in the menu bar." data-vi="Chép DriveCapture vào /Applications rồi mở lên. Tìm icon máy ảnh trên thanh menu.">Copies DriveCapture to /Applications and opens it. Look for the camera icon in the menu bar.</p>
+            <div class="term"><code>scripts/make-app.sh --install</code><button class="copy" type="button">Copy</button></div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3 data-en="Set it up in the app" data-vi="Thiết lập trong app">Set it up in the app</h3>
+            <ul class="setup-list">
+              <li data-en="Settings → Account → Sign in with Google." data-vi="Settings → Tài khoản → Đăng nhập Google.">Settings → Account → Sign in with Google.</li>
+              <li data-en="Settings → Folder → choose where captures go." data-vi="Settings → Folder → chọn nơi lưu.">Settings → Folder → choose where captures go.</li>
+              <li data-en="Press Option + Shift + 1, allow Screen Recording in System Settings, then reopen the app." data-vi="Bấm Option + Shift + 1, cho phép Screen Recording trong System Settings, rồi mở lại app.">Press Option + Shift + 1, allow Screen Recording in System Settings, then reopen the app.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3 data-en="Update later" data-vi="Cập nhật về sau">Update later</h3>
+            <div class="term"><code>git pull && scripts/make-app.sh --install</code><button class="copy" type="button">Copy</button></div>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
 </main>
+
+<footer>
+  <span data-en="DriveCapture — made for people who file a lot of bug reports." data-vi="DriveCapture — làm cho những ai báo bug rất nhiều.">DriveCapture — made for people who file a lot of bug reports.</span>
+  <span><a href="privacy.html" data-en="Privacy policy" data-vi="Chính sách quyền riêng tư">Privacy policy</a> &nbsp; <a href="mailto:anhtrannguyen@zigexn.vn">anhtrannguyen@zigexn.vn</a></span>
+</footer>
+
+<script>
+  // ---------- language toggle ----------
+  (() => {
+    const btn = document.getElementById('lang');
+    let lang = 'en';
+    try { lang = localStorage.getItem('dc-lang') || (navigator.language.startsWith('vi') ? 'vi' : 'en'); } catch {}
+    const apply = () => {
+      document.documentElement.lang = lang;
+      document.querySelectorAll('[data-en]').forEach(el => { el.textContent = el.dataset[lang]; });
+      btn.textContent = lang === 'en' ? 'VI' : 'EN';
+      document.querySelectorAll('.copy').forEach(b => { if (!b.classList.contains('done')) b.textContent = lang === 'en' ? 'Copy' : 'Copy'; });
+    };
+    btn.addEventListener('click', () => { lang = lang === 'en' ? 'vi' : 'en'; try { localStorage.setItem('dc-lang', lang); } catch {} apply(); });
+    apply();
+    window.dcLang = () => lang;
+  })();
+
+  // ---------- copy buttons ----------
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const text = btn.previousElementSibling.textContent;
+      try { await navigator.clipboard.writeText(text); } catch {
+        const r = document.createRange(); r.selectNodeContents(btn.previousElementSibling);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('copy'); s.removeAllRanges();
+      }
+      btn.classList.add('done');
+      btn.textContent = window.dcLang() === 'vi' ? 'Đã copy' : 'Copied';
+      setTimeout(() => { btn.classList.remove('done'); btn.textContent = 'Copy'; }, 1600);
+    });
+  });
+</script>
+
+<script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  } }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+  const stage = document.getElementById('stage');
+  const burst = document.getElementById('burst');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch (e) {
+    stage.classList.add('no-webgl');
+    throw e;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  stage.prepend(renderer.domElement);
+  renderer.domElement.setAttribute('aria-label', '3D MacBook showing DriveCapture. Drag to turn, click to slap.');
+  renderer.domElement.setAttribute('role', 'img');
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+  camera.position.set(0, 2.2, 9.4);
+  camera.lookAt(0, 0.55, 0);
+
+  // Lights: soft sky + key light + pink rim for the manga glow
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc9cbf0, 1.6));
+  const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(3, 6, 5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xff4f9a, 2.4); rim.position.set(-5, 2, -4); scene.add(rim);
+
+  // ---------- the laptop ----------
+  const ink = new THREE.MeshStandardMaterial({ color: 0x17173d, roughness: 0.6 });
+  const shell = new THREE.MeshStandardMaterial({ color: 0xdfe2ee, metalness: 0.55, roughness: 0.32 });
+  const keyMat = new THREE.MeshStandardMaterial({ color: 0x2a2b52, roughness: 0.8 });
+
+  const laptop = new THREE.Group();
+  scene.add(laptop);
+
+  const W = 4.2, D = 2.9;
+  const base = new THREE.Mesh(new RoundedBoxGeometry(W, 0.16, D, 4, 0.08), shell);
+  laptop.add(base);
+
+  // keyboard (instanced keys) + trackpad
+  const keyGeo = new RoundedBoxGeometry(0.24, 0.04, 0.22, 2, 0.03);
+  const cols = 13, rows = 5;
+  const keys = new THREE.InstancedMesh(keyGeo, keyMat, cols * rows);
+  const m = new THREE.Matrix4(); let i = 0;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    m.makeTranslation(-1.62 + c * 0.27, 0.09, -1.12 + r * 0.26); keys.setMatrixAt(i++, m);
+  }
+  laptop.add(keys);
+  const pad = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.02, 0.95, 2, 0.02),
+    new THREE.MeshStandardMaterial({ color: 0xcfd3e4, metalness: 0.4, roughness: 0.45 }));
+  pad.position.set(0, 0.08, 0.82); laptop.add(pad);
+
+  // lid on a hinge at the back edge
+  const hinge = new THREE.Group();
+  hinge.position.set(0, 0.08, -D / 2 + 0.02);
+  laptop.add(hinge);
+  const LID_OPEN = -1.86; // radians from flat
+  hinge.rotation.x = LID_OPEN;
+  const lid = new THREE.Mesh(new RoundedBoxGeometry(W, 0.1, D, 4, 0.05), shell);
+  lid.position.set(0, 0.05, D / 2); hinge.add(lid);
+  const bezel = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.12, D - 0.12), ink);
+  bezel.rotation.x = Math.PI / 2; bezel.position.set(0, -0.001, D / 2); hinge.add(bezel);
+
+  // screen: animated canvas texture showing the capture → upload → link flow
+  const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 680;
+  const g = sc.getContext('2d');
+  const screenTex = new THREE.CanvasTexture(sc); screenTex.colorSpace = THREE.SRGBColorSpace; screenTex.anisotropy = 8; screenTex.flipY = false;
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.36, D - 0.4),
+    new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+  screen.rotation.x = Math.PI / 2; screen.rotation.z = Math.PI; screen.scale.x = -1;
+  screen.position.set(0, -0.004, D / 2 + 0.02); hinge.add(screen);
+
+  function roundRect(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+  function drawScreen(t) {
+    const cycle = 7.5, p = (t % cycle) / cycle;
+    // desktop
+    const grd = g.createLinearGradient(0, 0, 1024, 680);
+    grd.addColorStop(0, '#7B8CFF'); grd.addColorStop(1, '#FF8CC2');
+    g.fillStyle = grd; g.fillRect(0, 0, 1024, 680);
+    // menu bar
+    g.fillStyle = 'rgba(255,255,255,.75)'; g.fillRect(0, 0, 1024, 34);
+    g.fillStyle = '#17173D'; g.font = '700 18px sans-serif'; g.fillText('  Slack    File    Edit    View', 10, 23);
+    // app window (a bug to report)
+    g.fillStyle = '#fff'; roundRect(90, 80, 600, 400, 16); g.fill();
+    g.fillStyle = '#EEF0FA'; roundRect(90, 80, 600, 44, 16); g.fill(); g.fillRect(90, 108, 600, 16);
+    ['#FF5F57', '#FEBC2E', '#28C840'].forEach((c, k) => { g.fillStyle = c; g.beginPath(); g.arc(118 + k * 24, 102, 7, 0, 7); g.fill(); });
+    g.fillStyle = '#C9CBEA'; for (let k = 0; k < 6; k++) { roundRect(120, 150 + k * 44, 380 - (k % 3) * 80, 18, 9); g.fill(); }
+    g.fillStyle = '#FF4F9A'; roundRect(120, 420, 170, 34, 10); g.fill();
+    g.fillStyle = '#fff'; g.font = '800 17px sans-serif'; g.fillText('Error 500', 158, 443);
+
+    // menu bar icon
+    const recording = p > 0.08 && p < 0.55;
+    g.fillStyle = recording ? '#FF3B30' : '#17173D';
+    g.beginPath(); g.arc(930, 17, 8, 0, 7); g.fill();
+
+    // selection drag (8% → 40%)
+    const sx = 100, sy = 390, ex = 460, ey = 480;
+    if (p > 0.08 && p < 0.55) {
+      const k = Math.min(1, (p - 0.08) / 0.3);
+      const e = 1 - Math.pow(1 - k, 3);
+      const cx = sx + (ex - sx) * e, cy = sy + (ey - sy) * e;
+      g.fillStyle = 'rgba(23,23,61,.35)'; g.fillRect(0, 34, 1024, 646);
+      g.strokeStyle = '#fff'; g.lineWidth = 3; g.setLineDash([10, 6]); g.strokeRect(sx, sy, cx - sx, cy - sy); g.setLineDash([]);
+      // redraw the selected area on top of the dim
+      g.save(); g.beginPath(); g.rect(sx, sy, cx - sx, cy - sy); g.clip();
+      g.fillStyle = '#fff'; g.fillRect(sx, sy, cx - sx, cy - sy);
+      g.fillStyle = '#FF4F9A'; roundRect(120, 420, 170, 34, 10); g.fill();
+      g.fillStyle = '#fff'; g.font = '800 17px sans-serif'; g.fillText('Error 500', 158, 443);
+      g.restore();
+      // cursor
+      g.fillStyle = '#17173D'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + 22, cy + 10); g.lineTo(cx + 10, cy + 14); g.lineTo(cx + 6, cy + 28); g.closePath(); g.fill();
+    }
+    // flash
+    if (p > 0.5 && p < 0.56) { g.fillStyle = `rgba(255,255,255,${1 - (p - 0.5) / 0.06})`; g.fillRect(0, 0, 1024, 680); }
+    // upload card (56% → 78%)
+    if (p > 0.56 && p < 0.8) {
+      const k = Math.min(1, (p - 0.56) / 0.2);
+      g.fillStyle = '#fff'; roundRect(640, 60, 350, 110, 18); g.fill();
+      g.fillStyle = '#17173D'; g.font = '800 22px sans-serif'; g.fillText('Uploading to Drive', 670, 102);
+      g.fillStyle = '#E3E6F7'; roundRect(670, 124, 290, 16, 8); g.fill();
+      g.fillStyle = '#3B82F6'; roundRect(670, 124, 290 * k, 16, 8); g.fill();
+    }
+    // toast
+    if (p > 0.78) {
+      const k = Math.min(1, (p - 0.78) / 0.06);
+      const y = 60 - (1 - k) * 30;
+      g.globalAlpha = k;
+      g.fillStyle = '#FFE14D'; roundRect(600, y, 390, 124, 18); g.fill();
+      g.strokeStyle = '#17173D'; g.lineWidth = 4; roundRect(600, y, 390, 124, 18); g.stroke();
+      g.fillStyle = '#17173D'; g.font = '800 26px sans-serif'; g.fillText('✓ Link copied', 630, y + 50);
+      g.font = '600 19px monospace'; g.fillText('drive.google.com/file/d/1eP…', 630, y + 90);
+      g.globalAlpha = 1;
+    }
+    screenTex.needsUpdate = true;
+  }
+
+  // ---------- layout ----------
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w < 520 ? 40 : 32;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+
+  // ---------- interaction ----------
+  let yaw = -0.45, pitch = 0.08, targetYaw = yaw, targetPitch = pitch;
+  let dragging = false, moved = 0, lastX = 0, lastY = 0;
+  const el = renderer.domElement;
+  el.addEventListener('pointerdown', e => { dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY; moved += Math.abs(dx) + Math.abs(dy);
+    targetYaw += dx * 0.008; targetPitch = Math.max(-0.25, Math.min(0.5, targetPitch + dy * 0.004));
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  el.addEventListener('pointerup', e => {
+    dragging = false;
+    if (moved < 6) {
+      const rect = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, camera);
+      if (ray.intersectObject(laptop, true).length) slap(0.6 + Math.random() * 0.4);
+    }
+  });
+
+  // slap physics: a damped spring on lid angle + body wobble
+  let wobble = 0, wobbleV = 0, lidV = 0, lidOffset = 0;
+  const lines = { en: ['やめて！', 'いたっ！', 'ばか！'], vi: ['やめて！', 'いたっ！', 'ばか！'] };
+  let voice;
+  function pickVoice() {
+    const vs = speechSynthesis?.getVoices?.() || [];
+    voice = vs.find(v => v.lang === 'ja-JP' && /Kyoko|O-Ren|Female|Google/.test(v.name)) || vs.find(v => v.lang.startsWith('ja'));
+  }
+  if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+  function slap(strength) {
+    wobbleV += (Math.random() > 0.5 ? 1 : -1) * 0.12 * strength;
+    lidV += 0.16 * strength;
+    burst.textContent = lines.en[Math.floor(Math.random() * lines.en.length)];
+    burst.classList.remove('on'); void burst.offsetWidth; burst.classList.add('on');
+    const meter = document.getElementById('meter');
+    meter.style.width = Math.round(strength * 100) + '%';
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('やめてください〜');
+      u.lang = 'ja-JP'; if (voice) u.voice = voice;
+      u.pitch = 1.6; u.rate = 1.05; u.volume = Math.min(1, 0.5 + strength / 2);
+      speechSynthesis.speak(u);
+    }
+  }
+  document.getElementById('slap-btn').addEventListener('click', () => {
+    stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    setTimeout(() => slap(0.7 + Math.random() * 0.3), reduceMotion ? 0 : 450);
+  });
+
+  // ---------- loop ----------
+  const clock = new THREE.Clock();
+  let screenTime = 0;
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    screenTime += reduceMotion ? dt * 0.4 : dt;
+    drawScreen(screenTime);
+
+    if (!dragging && !reduceMotion) targetYaw += Math.sin(t * 0.4) * 0.0009;
+    yaw += (targetYaw - yaw) * 0.08; pitch += (targetPitch - pitch) * 0.08;
+
+    wobbleV += -wobble * 0.18; wobbleV *= 0.86; wobble += wobbleV;
+    lidV += -lidOffset * 0.2; lidV *= 0.82; lidOffset += lidV;
+
+    laptop.rotation.set(pitch, yaw, wobble);
+    hinge.rotation.x = LID_OPEN + lidOffset;
+    laptop.position.y = reduceMotion ? 0.2 : 0.2 + Math.sin(t * 1.1) * 0.08;
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  frame();
+</script>
 </body>
 </html>
